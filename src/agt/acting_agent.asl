@@ -84,18 +84,35 @@ robot_td("https://raw.githubusercontent.com/Interactions-HSG/example-tds/main/td
     <-  .print("Witness Reputation Rating: (", WitnessAgent, ", ", SourceAgent, ", ", MessageContent, ", ", WRRating, ")");
     .
 
-/* 
- * Plan for reacting to the addition of the goal !select_reading(TempReadings, Celsius)
- * Triggering event: addition of goal !select_reading(TempReadings, Celsius)
- * Context: true (the plan is always applicable)
- * Body: unifies the variable Celsius with the 1st temperature reading from the list TempReadings
-*/
-@select_reading_task_0_plan
-+!select_reading(TempReadings, Celsius)
+/* Task 1: select the reading from the agent with highest average interaction trust */
+@select_reading_task_1_plan
++!select_reading(TempPairs, Celsius)
     :  true
-    <-  .nth(0, TempReadings, Celsius);
-    .
+    <-
+      .print("computing trust averages and selecting best‐trusted agent");
+      makeArtifact("trustCalc","tools.TrustCalculator",[], CalcId);
 
+      // add the interaction trust entries to the calculator
+      .findall([A,R],
+               interaction_trust(acting_agent,A,_,R),
+               Pairs);
+      for(.member([A,R], Pairs)) {
+        addRating(A, R)[artifact_id(CalcId)];
+      };
+
+      // get the best agent with the highest average trust
+      getBestAgent(BestAgent)[artifact_id(CalcId)];
+      .print("best agent = ",BestAgent);
+
+      // change agent to string
+      .findall([StrA,T],
+               ( temperature(T)[source(A)]
+               & .term2string(A, StrA) ),
+               StrTemps);
+  
+      // extract the read temperature of the best agent
+      .member([BestAgent, Celsius], StrTemps);
+      .print("temp from best agent = ", Celsius).
 /* 
  * Plan for reacting to the addition of the goal !manifest_temperature
  * Triggering event: addition of goal !manifest_temperature
@@ -106,9 +123,19 @@ robot_td("https://raw.githubusercontent.com/Interactions-HSG/example-tds/main/td
 */
 @manifest_temperature_plan 
 +!manifest_temperature
-    :  temperature(Celsius) & robot_td(Location)
-    <-  .print("I will manifest the temperature: ", Celsius);
-        convert(Celsius, -20.00, 20.00, 200.00, 830.00, Degrees)[artifact_id(ConverterId)]; // converts Celsius to binary degrees based on the input scale
+    :  robot_td(Location)
+    <-  // Collect all temperature readings and their sources
+        .findall([A,T],
+                 temperature(T)[source(A)],
+                 TempPairs);
+        .print("collected temp and agent pairs = ", TempPairs);
+
+        // Initiate interaction trust calculation
+        !select_reading(TempPairs, SelectedTemp);
+        
+        // Continue with manifesting the selected temperature
+        .print("I will manifest the temperature: ", SelectedTemp);
+        convert(SelectedTemp, -20.00, 20.00, 200.00, 830.00, Degrees)[artifact_id(ConverterId)]; // converts Celsius to binary degrees based on the input scale
         .print("Temperature Manifesting (moving robotic arm to): ", Degrees);
 
         /* 
