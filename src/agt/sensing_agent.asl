@@ -1,6 +1,20 @@
 // sensing agent
 
 /* Initial beliefs and rules */
+// Rule for determining agent type (honest vs rogue)
+is_honest(sensing_agent_1).
+is_honest(sensing_agent_2).
+is_honest(sensing_agent_3).
+is_honest(sensing_agent_4).
+
+is_rogue(sensing_agent_5).
+is_rogue(sensing_agent_6).
+is_rogue(sensing_agent_7).
+is_rogue(sensing_agent_8).
+is_rogue(sensing_agent_9).
+
+wr_rating(Target, 1.0) :- is_honest(Target).
+wr_rating(Target, -1.0) :- is_rogue(Target).
 
 // infers whether there is a mission for which goal G has to be achieved by an agent with role R
 role_goal(R,G) :- role_mission(R,_,M) & mission_goal(M,G).
@@ -85,9 +99,27 @@ i_have_plans_for(R) :- not (role_goal(R,G) & not has_plan_for(G)).
  * Context: true (the plan is always applicable)
  * Body: prints new certified reputation rating (relevant from Task 3 and on)
 */
+
 +certified_reputation(CertificationAgent, SourceAgent, MessageContent, CRRating)
     :  true
     <-  .print("Certified Reputation Rating: (", CertificationAgent, ", ", SourceAgent, ", ", MessageContent, ", ", CRRating, ")");
+    .
+
+/* Respond to askOne requests for certified reputation */
+@reply_certified_reputation
++?certified_reputation(CertAgent, Reader, _, CRRating)
+    : .my_name(Reader) &
+      certified_reputation(CertAgent, Reader, _, Rating)
+    <- .print("Found reputation rating: ", Rating);
+       CRRating = Rating
+    .
+
+/* Task 4: Respond to askOne requests for witness reputation */
+@reply_witness_reputation
++?witness_reputation(Witness, Target, _, WRRating)
+    : .my_name(Witness) & wr_rating(Target, Rating)
+    <-  WRRating = Rating;
+       .print("Providing witness rating for ", Target, ": ", WRRating)
     .
 
 /* Import behavior of agents that work in CArtAgO environments */

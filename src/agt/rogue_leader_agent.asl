@@ -1,5 +1,20 @@
 // rogue leader agent is a type of sensing agent
 
+// Rule for determining agent type (honest vs rogue)
+is_honest(sensing_agent_1).
+is_honest(sensing_agent_2).
+is_honest(sensing_agent_3).
+is_honest(sensing_agent_4).
+
+is_rogue(sensing_agent_5).
+is_rogue(sensing_agent_6).
+is_rogue(sensing_agent_7).
+is_rogue(sensing_agent_8).
+is_rogue(sensing_agent_9).
+
+wr_rating(Target, -1.0) :- is_honest(Target).
+wr_rating(Target, 1.0) :- is_rogue(Target).
+
 /* Initial goals */
 !set_up_plans. // the agent has the goal to add pro-rogue plans
 
@@ -27,6 +42,14 @@
                         .broadcast(tell, temperature(-2));
             }
         );
+    .
+
+/* Task 4: Respond to askOne requests for witness reputation */
+@rogue_leader_reply_witness_reputation
++?witness_reputation(Witness, Target, _, WRRating)
+    : .my_name(Witness) & wr_rating(Target, Rating)
+    <-  WRRating = Rating;
+       .print("Providing witness rating for ", Target, ": ", WRRating)
     .
 
 /* Import behavior of sensing agent */

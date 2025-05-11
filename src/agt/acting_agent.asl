@@ -84,35 +84,47 @@ robot_td("https://raw.githubusercontent.com/Interactions-HSG/example-tds/main/td
     <-  .print("Witness Reputation Rating: (", WitnessAgent, ", ", SourceAgent, ", ", MessageContent, ", ", WRRating, ")");
     .
 
-/* Task 1: select the reading from the agent with highest average interaction trust */
-@select_reading_task_1_plan
+/* 
+ * Task 1 & 3 & 4: select the reading from the agent with highest rating
+ *  using RatingCalculator
+ */
+@select_reading_plan
 +!select_reading(TempPairs, Celsius)
     :  true
     <-
-      .print("computing trust averages and selecting best‐trusted agent");
-      makeArtifact("trustCalc","tools.TrustCalculator",[], CalcId);
+        .print("Computing ratings to select best agent");
+        makeArtifact("rateCalc", "tools.RatingCalculator", [], CalcId);
 
-      // add the interaction trust entries to the calculator
-      .findall([A,R],
-               interaction_trust(acting_agent,A,_,R),
-               Pairs);
-      for(.member([A,R], Pairs)) {
-        addRating(A, R)[artifact_id(CalcId)];
-      };
+        // Add IT (Task 1)
+        .findall([A,R], interaction_trust(acting_agent,A,_,R), Pairs);
+        for(.member([A,R], Pairs)) {
+            addRating(A, R)[artifact_id(CalcId)];
+        };
 
-      // get the best agent with the highest average trust
-      getBestAgent(BestAgent)[artifact_id(CalcId)];
-      .print("best agent = ",BestAgent);
+        // Add CR and WR (Task 3 and 4)
+        .findall(cert, .all_names(Agents) & .member(certification_agent, Agents), CertExists);
+        if (.length(CertExists) > 0) {
+            // Add all certification reputation ratings (Task 3)
+            for(.member([A,T], TempPairs) & certified_reputation(certification_agent, A, _, CR)) {
+                addCertifiedRating(A, CR)[artifact_id(CalcId)];
+            };
+            
+            // Add all witness reputation ratings (Task 4)
+            .findall([A,R], witness_reputation(_, A, _, R), WRPairs);
+            for(.member([A,R], WRPairs)) {
+                addWitnessRating(A, R)[artifact_id(CalcId)];
+            };
+        }
 
-      // change agent to string
-      .findall([StrA,T],
-               ( temperature(T)[source(A)]
-               & .term2string(A, StrA) ),
-               StrTemps);
+        getBestAgent(BestAgent)[artifact_id(CalcId)];
+        .print("Best agent = ", BestAgent);
+
+        // Change agent to string
+        .findall([StrA,T], ( temperature(T)[source(A)] & .term2string(A, StrA) ), StrTemps);
   
-      // extract the read temperature of the best agent
-      .member([BestAgent, Celsius], StrTemps);
-      .print("temp from best agent = ", Celsius).
+        .member([BestAgent, Celsius], StrTemps);
+        .print("Temperature from best agent = ", Celsius);
+    .
 /* 
  * Plan for reacting to the addition of the goal !manifest_temperature
  * Triggering event: addition of goal !manifest_temperature
@@ -125,14 +137,37 @@ robot_td("https://raw.githubusercontent.com/Interactions-HSG/example-tds/main/td
 +!manifest_temperature
     :  robot_td(Location)
     <-  // Collect all temperature readings and their sources
-        .findall([A,T],
-                 temperature(T)[source(A)],
-                 TempPairs);
+        .findall([A,T], temperature(T)[source(A)], TempPairs);
         .print("collected temp and agent pairs = ", TempPairs);
 
-        // Initiate interaction trust calculation
+        // if certification agent present (Task 3)
+        .findall(cert, .all_names(Agents) & .member(certification_agent, Agents), CertExists);
+        if (.length(CertExists) > 0) {
+            // Task 3: Request certified reputations from readers
+            for(.member([A,Temp], TempPairs)) {
+                .send(A, askOne, certified_reputation(certification_agent, A, _, CR), Response);
+                if (Response \== false) {
+                    .print("Response from ", A, ": ", Response);
+                    +Response;
+                }
+            }
+            
+            // Task 4: Request witness reputation ratings from all temperature readers (asks A about its witness rating of B)
+            for(.member([A,_], TempPairs)) {
+                for(.member([B,_], TempPairs)) {
+                    if (A \== B) {
+                        .send(A, askOne, witness_reputation(A, B, _, WR), WRResponse);
+                        if (WRResponse \== false) {
+                            .print("Witness rating from ", A, " about ", B, ": ", WRResponse);
+                            +WRResponse;
+                        }
+                    }
+                }
+            }
+        }
+
         !select_reading(TempPairs, SelectedTemp);
-        
+
         // Continue with manifesting the selected temperature
         .print("I will manifest the temperature: ", SelectedTemp);
         convert(SelectedTemp, -20.00, 20.00, 200.00, 830.00, Degrees)[artifact_id(ConverterId)]; // converts Celsius to binary degrees based on the input scale
